@@ -45,7 +45,7 @@ app.use(function (err, req, res, next) {
     }
 });
 
-// Define your route for the homepage
+// Define route for the homepage
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'index.html'));
 });
@@ -54,7 +54,7 @@ app.get('/dashboard', isAuthenticatedAndSubscribed, (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'dashboard.html'));
 });
 
-app.get('/login', isAuthenticatedAndSubscribed, (req, res) => {
+app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'login.html'));
 });
 
@@ -63,8 +63,6 @@ app.get('/login', isAuthenticatedAndSubscribed, (req, res) => {
 app.post('/events', eventsManager);
 
 app.get('/register', (req, res) => {
-    // Optionally, you can include logic here to verify the payment was successful
-    // For example, by using the session ID passed as a query parameter
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'register.html'));
 });
 
