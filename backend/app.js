@@ -54,6 +54,10 @@ app.get('/dashboard', isAuthenticatedAndSubscribed, (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'dashboard.html'));
 });
 
+app.get('/login', isAuthenticatedAndSubscribed, (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'login.html'));
+});
+
 
 // Stripe events endpoint
 app.post('/events', eventsManager);
