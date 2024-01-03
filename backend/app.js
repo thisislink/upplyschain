@@ -35,7 +35,7 @@ app.post('/create-checkout-session', async (req, res) => {
 
 
 // Serve static files from the 'frontend' directory
-app.use(express.static(path.join(__dirname, 'frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 app.use(function (err, req, res, next) {
     if (err.name === 'UnauthorizedError') {
