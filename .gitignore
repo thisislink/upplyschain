@@ -1,0 +1,24 @@
+# Dependency directory
+node_modules/
+
+# Environment configuration
+/backend/.env
+
+# SQLite Database file if you're using SQLite
+/database/*.sqlite
+/database/*.sqlite3
+
+# Operating system generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Database
+upplyschain.db
