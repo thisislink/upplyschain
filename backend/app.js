@@ -1,49 +1,58 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const path = require('path');
 const eventsManager = require('./eventsManager');
 require('dotenv').config({ path: './backend/.env' });
 const db = require('../database/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { expressjwt } = require("express-jwt");
+const cookieParser = require('cookie-parser');
+const { sign, verify } = require('jsonwebtoken');
+
 const app = express();
 
 // Middleware for parsing JSON and urlencoded data
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-// Middleware to validate token and set req.user
-//app.use(expressJwt({ secret: process.env.JWT_SECRET, algorithms: ['HS256'] }).unless({ path: ['/login', '/register'] }));
-
-// Middleware to verify user has an active subscription
-const isAuthenticatedAndSubscribed = (req, res, next) => {
-    if (!req.user || !req.user.is_subscribed) {
-        return res.status(401).send('Access denied. Active subscription required.');
-    }
-    next();
-};
-
-// Before redirect create session id for tracking and creating new customer
-app.post('/create-checkout-session', async (req, res) => {
-    const session = await stripe.checkout.sessions.create({
-        // ... other session parameters ...
-        success_url: 'https://upplyschain.com/register?session_id={CHECKOUT_SESSION_ID}',
-        cancel_url: 'https://upplyschain.com/cancel',
-    });
-
-    res.json({ sessionId: session.id });
-});
-
+app.use(express.json());
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from the 'frontend' directory
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend', 'public')));
 
-app.use(function (err, req, res, next) {
-    if (err.name === 'UnauthorizedError') {
-        res.status(401).send('Invalid token or unauthorized access.');
-    } else {
-        res.status(500).send('Server error');
+// Middleware to validate token and set req.user
+app.use(expressjwt({
+    secret: process.env.JWT_SECRET,
+    algorithms: ['HS256'],
+    getToken: req => {
+        if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+            return req.headers.authorization.split(' ')[1];
+        } else if (req.cookies.token) {
+            return req.cookies.token;
+        }
+        return null;
     }
-});
+}).unless({
+    path: ['/', '/login', '/register']
+}));
+
+// Middleware to verify user has an active subscription
+const isAuthenticatedAndSubscribed = (req, res, next) => {
+    const token = req.cookies["token"]; 
+    
+    if (!token) {
+        return res.status(401).send('Access denied. Active subscription required.');
+    }
+    try {
+        const isValidToken = verify(token, process.env.JWT_SECRET);
+        if(isValidToken) {
+            req.authenticated = true;
+            return next();
+        }
+    } catch (err) {
+        return res.status(400).json({ error: err });
+    }
+};
 
 // Define route for the homepage
 app.get('/', (req, res) => {
@@ -56,6 +65,11 @@ app.get('/dashboard', isAuthenticatedAndSubscribed, (req, res) => {
 
 app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'views', 'login.html'));
+});
+
+app.get('/logout', (req, res) => {
+    res.clearCookie('token'); // Clear the token cookie
+    res.redirect('/'); // Redirect to the homepage
 });
 
 
@@ -105,25 +119,62 @@ app.post('/register', async (req, res) => {
     }
 });
 
+app.post('/login', async (req, res) => {
+    try {
+        // Check if the 'Remember Me' option was checked
+        const rememberMe = req.body.rememberMe === 'remember';
 
-app.post('/login', (req, res) => {
-    const { email, password } = req.body;
+        // Set token expiration: short duration if not remembered, longer if remembered
+        const expirationTime = rememberMe ? '365d' : '1h';
 
-    const query = 'SELECT * FROM users WHERE email = ?';
-    db.get(query, [email], async (err, user) => {
-        if (err) {
-            return res.status(500).send('Error logging in user.');
-        }
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).send('Invalid credentials.');
-        }
-        if (!user.is_subscribed) {
-            return res.status(403).send('Account is not active. Please subscribe.');
+        const createToken = (user) => {
+            const accessToken = jwt.sign({ id: user.id, email: user.email, hasActiveSubscription: user.hasActiveSubscription }, process.env.JWT_SECRET, { expiresIn: expirationTime });
+            return accessToken;
         }
 
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.json({ token });
-    });
+        const query = 'SELECT * FROM users WHERE email = ?';       
+
+        db.get(query, [req.body.email], async (err, user) => {
+            if (err) {
+                console.log("error logging in user");
+                return res.status(500).send('Error logging in user.');
+            }
+            if (!user || !(await bcrypt.compare(req.body.password, user.password))) {
+                console.log("Invalid credentials");
+                return res.status(401).send('Invalid credentials.');
+            }
+
+            const getToken = createToken(user);
+
+            if (user.hasActiveSubscription) {       
+                res.cookie('token', getToken, { 
+                    maxAge: rememberMe ? 30 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
+                    httpOnly: true 
+                }); // Set the token in a cookie
+                res.redirect('/dashboard'); // Redirect to the dashboard
+            } else {
+                console.log("not active");
+                return res.status(403).send('Account is not active. Please subscribe.');
+            }
+        });
+    } catch (e) {
+        console.log(e);
+        res.status(500).send('Server error');
+    }
+});
+
+// Error handling for unauthorized errors
+app.use(function (err, req, res, next) {
+    if (err.name === 'UnauthorizedError') {
+        res.redirect('/login');
+        console.log('Invalid token or unauthorized access.');
+    } else {
+        // Log the error for debugging purposes
+        console.error('Error occurred:', err);
+
+        // Respond with 500 Internal Server Error for any other errors
+        res.status(500).send('Something broke on the server!');
+    } 
 });
 
 // Start the server
