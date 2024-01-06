@@ -85,7 +85,7 @@ app.post('/register', async (req, res) => {
 
     try {
         // Check if there's an active subscription for the given email
-        const checkSubscriptionQuery = 'SELECT * FROM users WHERE email = ? AND is_subscribed = TRUE';
+        const checkSubscriptionQuery = 'SELECT * FROM users WHERE email = ? AND hasActiveSubscription = TRUE';
         db.get(checkSubscriptionQuery, [email], async (err, user) => {
             if (err) {
                 console.error(err.message);
@@ -98,14 +98,14 @@ app.post('/register', async (req, res) => {
             } else {
                 // No active subscription found, proceed with registration
                 const hashedPassword = await bcrypt.hash(password, 10);
-                const insertQuery = 'INSERT INTO users (email, password, is_subscribed) VALUES (?, ?, ?)';
-                db.run(insertQuery, [email, hashedPassword, false], function (insertErr) {
+                const insertQuery = 'INSERT INTO users (email, password, hasActiveSubscription) VALUES (?, ?, ?)';
+                db.run(insertQuery, [email, hashedPassword, true], function (insertErr) {
                     if (insertErr) {
                         console.error(insertErr.message);
                         res.status(500).send('Error registering new user.');
                     } else {
                         // User is registered, create a JWT token and log them in
-                        const token = jwt.sign({ id: this.lastID, email: email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+                        const token = jwt.sign({ id: this.lastID, email: email, hasActiveSubscription: 1 }, process.env.JWT_SECRET, { expiresIn: '15m' });
                         res.cookie('token', token, { httpOnly: true }); // Use 'secure: true' if using HTTPS
                         res.redirect('/dashboard');
                         console.log(`A new user has been created with ID: ${this.lastID}`);
@@ -154,6 +154,8 @@ app.post('/login', async (req, res) => {
                 res.redirect('/dashboard'); // Redirect to the dashboard
             } else {
                 console.log("not active");
+                // need to change this to send the message back to the UI with a link to stripe to manage their subscription
+                alert('Account is not active. Please subscribe.');
                 return res.status(403).send('Account is not active. Please subscribe.');
             }
         });

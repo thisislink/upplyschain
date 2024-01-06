@@ -1,12 +1,20 @@
-document.getElementById('loginForm').addEventListener('submit', function (event) {
+document.addEventListener('DOMContentLoaded', function() {
+    // Extract the token from the URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    // Set the token as the value of the hidden input field
+    document.getElementById('registrationToken').value = token;
+});
+
+document.getElementById('registerForm').addEventListener('submit', function (event) {
     event.preventDefault();
 
     var email = document.getElementById('floatingInput').value;
     var password = document.getElementById('floatingPassword').value;
-    var rememberMe = document.getElementById('flexCheckDefault').checked;
 
     // Request to backend /login endpoint
-    axios.post('/login', { email, password, rememberMe })
+    axios.post('/register', { email, password })
         .then(res => {
             window.location.href = '/dashboard';
         })
